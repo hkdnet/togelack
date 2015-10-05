@@ -6,9 +6,9 @@ require 'compass'
 require 'coffee-script'
 
 require 'lib/mocks/slack_mock'
-require 'lib/connections/slack_connection'
 require 'lib/services/messages_service'
 require 'lib/services/channels_service'
+require 'lib/services/login_service'
 require 'lib/models/api/response_base'
 
 module Komonjo
@@ -35,11 +35,25 @@ module Komonjo
       coffee :"coffee/#{params[:name]}"
     end
 
+    get '/api/login' do
+      content_type :json
+      res = Komonjo::Model::API::ResponseBase.new
+      res.data = session[:api_token]
+      res.to_json
+    end
+
     post '/api/login' do
+      content_type :json
       res = Komonjo::Model::API::ResponseBase.new
       api_token = params[:api_token] || ''
       if api_token != ''
-        session[:api_token] = api_token
+        service = Komonjo::Service::LoginService.new(api_token)
+        if service.login
+          session[:api_token] = api_token
+        else
+          res.ok = false
+          res.message = 'ERROR: api_token is invalid.'
+        end
       else
         res.ok = false
         res.message = 'ERROR: api_token is required.'
@@ -48,20 +62,21 @@ module Komonjo
     end
 
     get '/api/channels' do
+      content_type :json
       res = Komonjo::Model::API::ResponseBase.new
-      puts session[:api_token]
       api_token = session[:api_token] || ''
-      if !api_token.nil? && api_token != ''
+      if api_token != ''
         channels_service = Komonjo::Service::ChannelsService.new(api_token)
         res.data = channels_service.channels.map(&:name)
       else
         res.ok = false
-        res.message = 'ERROR: api_token is required.'
+        res.message = 'ERROR: you have not logged in.'
       end
       res.to_json
     end
 
     get '/api/messages' do
+      content_type :json
       res = Komonjo::Model::API::ResponseBase.new
       api_token = session[:api_token] || ''
       channel_name = params[:channel_name] || ''
